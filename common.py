@@ -7,14 +7,14 @@ input_height = 600
 input_width = 800
 image_shape = (input_height, input_width)
 
-nw_height = 600
+nw_height = 336
 nw_width = 800
 nw_shape = (nw_height, nw_width)
 
-OFFSET_HIGH = 0
+OFFSET_HIGH = 190
 OFFSET_LOW = OFFSET_HIGH + nw_height
 
-visualize = True
-enable_profiling = True
+visualize = False
+enable_profiling = False
 
-model_path = 'ep-078-val_loss-0.9916.hdf5'
+model_path = 'checkpoint/ep-002-val_loss-1.0292.hdf5'

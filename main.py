@@ -272,9 +272,9 @@ def augmentation_fn(image, label, label2, label3):
 # tests.test_train_nn(train_nn)
 def run():
     from_scratch = False
-    do_train = False
+    do_train = True
     learning_rate_val = 0.001
-    epochs = 1
+    epochs = 55
     decay = learning_rate_val / (2 * epochs)
     batch_size = 8
     data_dir = './Train'

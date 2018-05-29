@@ -27,6 +27,29 @@ class DLProgress(tqdm):
         self.last_block = block_num
 
 
+def preprocess_labels(label_image):
+    road_id = 7
+    lane_id = 6
+    car_id = 10
+    # Create a new single channel label image to modify
+    labels_new = np.copy(label_image[:, :, 0])
+    # Identify lane marking pixels (label is 6)
+    lane_marking_pixels = (label_image[:, :, 0] == lane_id).nonzero()
+    # Set lane marking pixels to road (label is 7)
+    labels_new[lane_marking_pixels] = road_id
+
+    # Identify all vehicle pixels
+    vehicle_pixels = (label_image[:, :, 0] == car_id).nonzero()
+    # Isolate vehicle pixels associated with the hood (y-position > 496)
+    hood_indices = (vehicle_pixels[0] >= 496).nonzero()[0]
+    hood_pixels = (vehicle_pixels[0][hood_indices], \
+                   vehicle_pixels[1][hood_indices])
+    # Set hood pixel labels to 0
+    labels_new[hood_pixels] = 0
+    # Return the preprocessed label image
+    return labels_new
+
+
 def maybe_download_pretrained_vgg(data_dir):
     """
     Download and extract pretrained vgg model if it doesn't exist
@@ -89,7 +112,7 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
     image_paths = []
     label_fns = []
 
-    data_folders = glob(data_folder + "/_2/")
+    data_folders = glob(data_folder + "/_*/")
     print(data_folders)
     for data_folder in data_folders:
         image_paths.extend(sorted(glob(os.path.join(data_folder, image_folder, '*.png')))[:])
@@ -97,7 +120,7 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
 
     # image_paths = image_paths[:16]
     train_paths, val_paths = train_test_split(
-        image_paths, test_size=0.3, random_state=21)
+        image_paths, test_size=0.4, random_state=28)
 
     # label_paths = {os.path.basename(path): path for path in label_fns}
     label_paths = {path: path for path in label_fns}
@@ -126,9 +149,10 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
                 image = in_image[OFFSET_HIGH:OFFSET_LOW, :]
 
                 in_gt = scipy.misc.imread(gt_image_file)
+                # in_gt = scipy.misc.imresize(in_gt, image_shape, interp='nearest')[:, :, 0]
+                in_gt = preprocess_labels(in_gt)
 
-                # gt_image = scipy.misc.imresize(in_gt, image_shape, interp='nearest')[:,:,0]
-                gt_image = in_gt[OFFSET_HIGH:OFFSET_LOW, :, 0]
+                gt_image = in_gt[OFFSET_HIGH:OFFSET_LOW, :]
 
                 gt_road = ((gt_image == road_id) | (gt_image == lane_id))
                 gt_car = (gt_image == car_id)
@@ -163,7 +187,7 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
                 gt_images.append(gt_image)
 
             # yield np.array(images) / 127.5 - 1.0, np.array(gt_images)
-            yield np.array(images), np.array(gt_images)
+            yield np.array(images) / 127.5 - 1.0, np.array(gt_images)
 
     train_batches_fn = lambda batch_size: get_batches_fn(batch_size, train_paths, augmentation_fn=train_augmentation_fn,
                                                          im_size=nw_shape)  # noqa
@@ -268,7 +292,7 @@ def get_seg_img(sess, logits, image_pl, pimg_in, image_shape, nw_shape, learning
     image = (pimg_in + 1.0) * 127.5
     image = scipy.misc.toimage(image)
 
-    return blend_output(image, im_out, (0, 255, 0), (250, 250, 250), image_shape)
+    return blend_output(image, im_out, (0, 255, 0), (250, 0, 0), image_shape)
 
 
 def gen_lyft_test_output(
@@ -289,20 +313,20 @@ def gen_lyft_test_output(
     :param image_shape: Tuple - Shape of image
     :return: Output for for each test image
     """
-    print(data_folder)
-    print(os.path.join(data_folder, image_folder, '*.png'))
+    # print(data_folder)
+    # print(os.path.join(data_folder, image_folder, '*.png'))
 
     for image_file in sorted(
             glob(os.path.join(data_folder, image_folder, '*.png')))[:]:
         print(image_file)
         in_image = scipy.misc.imread(image_file, mode='RGB')
         image = scipy.misc.imresize(in_image, image_shape)
-
-        pimg = image / 127.5 - 1.0
-        pimg = pimg[OFFSET_HIGH:OFFSET_LOW, :, :]
+        pimg = image[OFFSET_HIGH:OFFSET_LOW, :, :]
+        pimg = pimg / 127.5 - 1.0
+        # print(pimg.shape)
         street_im = get_seg_img(sess, logits, image_pl, pimg, nw_shape, nw_shape, learning_phase)
 
-        street_im = scipy.misc.imresize(street_im, in_image.shape)
+        # street_im = scipy.misc.imresize(street_im, in_image.shape)
         yield os.path.basename(image_file), np.array(street_im)
 
 
