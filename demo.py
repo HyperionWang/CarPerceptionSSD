@@ -114,7 +114,9 @@ if __name__ == '__main__':
 
     if enable_profiling:
         fps = frame / (time.time() - start_t)
-        print("FPS: %f" % (fps))
+        # print("FPS: %f" % (fps))
     else:
         # Print output in proper json format
-        print(json.dumps(answer_key))
+        # print(json.dumps(answer_key))
+        json.dumps(answer_key)
+        pass

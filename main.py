@@ -18,7 +18,7 @@ import glob
 KERAS_TRAIN = 1
 KERAS_TEST = 0
 use_ce_loss = False
-# use_ce_loss = True
+epsilon = 1e-5
 
 from common import *
 
@@ -35,12 +35,9 @@ if not tf.test.gpu_device_name():
 else:
     print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
 
-epsilon = 1e-5
-
 
 def calc_f(beta, pr, rc):
     f_val = ((1 + beta ** 2) * pr * rc) / (epsilon + ((beta ** 2) * pr) + rc)
-
     return f_val
 
 
@@ -68,7 +65,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
         loss = 0
         beta_car = 2.0
         beta_road = 0.5
-        weights = [0.0, 0.7, 0.3]  # Background, Car, Road
+        weights = [0.0, 0.8, 0.2]  # Background, Car, Road
         F_car = 0
         F_road = 0
         for i in range(num_classes):
@@ -89,7 +86,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
         F_max = weights[1] * calc_fmax(beta_car) + weights[2] * calc_fmax(beta_road)
         ce_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=correct_label, logits=logits))
         # loss = (F_max - (weights[1]*F_car + weights[2]*F_road))
-        loss = ce_loss + (F_max - (weights[1] * F_car + weights[2] * F_road))
+        loss = (F_max - (weights[1] * F_car + weights[2] * F_road))
 
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     # optimizer = tf.train.AdagradOptimizer(learning_rate=learning_rate)
@@ -193,9 +190,9 @@ def train_nn(
             train_ce_loss += ce_loss_val
             iteration_counter += 1
 
-            if iteration_counter % 20 == 0:
+            if iteration_counter % 100 == 0:
                 segmented_images = []
-                for i in range(len(image)):
+                for i in range(5):
                     img1 = helper.get_seg_img(sess, model.output, input_image, image[i], image_shape=nw_shape,
                                               nw_shape=nw_shape, learning_phase=learning_phase)
                     arg_label = label[i].argmax(axis=2)
@@ -225,7 +222,7 @@ def train_nn(
             iteration_counter += 1
 
         segmented_images = []
-        for i in range(len(image)):
+        for i in range(5):
             segmented_images.append(np.array(helper.get_seg_img(sess, model.output, input_image, image[i],
                                                                 image_shape=nw_shape, nw_shape=nw_shape,
                                                                 learning_phase=learning_phase)))
@@ -250,7 +247,7 @@ def train_nn(
 
         writer.add_summary(summary_val, epoch)
         if epoch % 1 == 0:
-            weight_path = 'checkpoint/ep-%03d-val_loss-%.4f.hdf5' \
+            weight_path = 'checkpoint/ep-newweight-%03d-val_loss-%.4f.hdf5' \
                           % (epoch, val_loss)
             model.save(weight_path)
 
@@ -274,22 +271,17 @@ def run():
     from_scratch = False
     do_train = True
     learning_rate_val = 0.001
-    epochs = 55
+    epochs = 20
     decay = learning_rate_val / (2 * epochs)
-    batch_size = 8
+    batch_size = 12
     data_dir = './Train'
     runs_dir = './runs'
-    # tests.test_for_kitti_dataset('./data')
-    # OPTIONAL: Train and Inference on the cityscapes dataset instead of the
-    # You'll need a GPU with at least 10 teraFLOPS to train on.
-    #  https://www.cityscapes-dataset.com/
+
     if not from_scratch:
         weight_path = helper.maybe_download_mobilenet_weights()
 
     if not os.path.exists('checkpoint'):
         os.makedirs('checkpoint')
-    # else:
-    # shutil.rmtree('checkpoint')
 
     model_files = glob.glob('checkpoint/ep-*.hdf5')
     model_files.sort(key=os.path.getmtime)
@@ -325,7 +317,7 @@ def run():
 
         if do_train:
             print("N_train: %d\tN_val:%d\tTrain steps: %d\tVal_steps: %d\tBatch size: %d" % (
-            N_train, N_val, int(N_train / batch_size), int(N_val / batch_size), batch_size))
+                N_train, N_val, int(N_train / batch_size), int(N_val / batch_size), batch_size))
             train_nn(sess, epochs, batch_size,
                      train_batches_fn, val_batches_fn,
                      train_op, loss, ce_loss, input_image,

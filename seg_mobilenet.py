@@ -17,6 +17,8 @@ from keras.applications.mobilenet import _conv_block
 import tensorflow as tf
 
 alpha = 1.0
+
+
 def TruncatedMobileNet(input_height, input_width):
     assert input_height // 16 * 16 == input_height
     assert input_width // 16 * 16 == input_width
@@ -81,18 +83,21 @@ def SegMobileNet(input_height, input_width, num_classes=21):
     x = Upsample_s1(x_s2)
     '''
 
-    x_up8 = Conv2DTranspose(int(256*alpha), (3,3), strides=(2, 2), data_format='channels_last', padding='same', name='deconv_8')(x_s16)
+    x_up8 = Conv2DTranspose(int(256 * alpha), (3, 3), strides=(2, 2), data_format='channels_last', padding='same',
+                            name='deconv_8')(x_s16)
     x_s8 = Add(name='add_s8')([x_up8, x_s8])
 
-    x_up4 = Conv2DTranspose(int(128*alpha), (3,3), strides=(2, 2), padding='same', name='deconv_4')(x_s8)
+    x_up4 = Conv2DTranspose(int(128 * alpha), (3, 3), strides=(2, 2), padding='same', name='deconv_4')(x_s8)
     x_s4 = Add(name='add_s4')([x_up4, x_s4])
 
-    x_up2 = Conv2DTranspose(int(64*alpha), (3,3), strides=(2, 2), padding='same', name='deconv_2')(x_s4)
+    x_up2 = Conv2DTranspose(int(64 * alpha), (3, 3), strides=(2, 2), padding='same', name='deconv_2')(x_s4)
     x_s2 = Add(name='add_s2')([x_up2, x_s2])
 
-    x = Conv2DTranspose(num_classes, (3,3), strides=(2, 2), padding='same', activation='softmax', name='deconv_1')(x_s2)
+    x = Conv2DTranspose(num_classes, (3, 3), strides=(2, 2), padding='same', activation='softmax', name='deconv_1')(
+        x_s2)
 
     return Model(img_input, x, name='SegMobileNet')
+
 
 def _conv_bn_pred(x, stride, num_classes=21):
     x = Conv2D(num_classes, 1, use_bias=False, padding='same',
@@ -119,7 +124,7 @@ def _depthwise_conv_block(inputs, pointwise_conv_filters, alpha,
     A depthwise convolution block consists of a depthwise conv,
     batch normalization, relu6, pointwise convolution,
     batch normalization and relu6 activation.
-    DONE(see--): Allow dilated depthwise convolutions
+    Allow dilated depthwise convolutions
     """
     channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
     pointwise_conv_filters = int(pointwise_conv_filters * alpha)

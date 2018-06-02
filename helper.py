@@ -50,46 +50,6 @@ def preprocess_labels(label_image):
     return labels_new
 
 
-def maybe_download_pretrained_vgg(data_dir):
-    """
-    Download and extract pretrained vgg model if it doesn't exist
-    :param data_dir: Directory to download the model to
-    """
-    vgg_filename = 'vgg.zip'
-    vgg_path = os.path.join(data_dir, 'vgg')
-    vgg_files = [
-        os.path.join(vgg_path, 'variables/variables.data-00000-of-00001'),
-        os.path.join(vgg_path, 'variables/variables.index'),
-        os.path.join(vgg_path, 'saved_model.pb')]
-
-    missing_vgg_files = [
-        vgg_file for vgg_file in vgg_files if not os.path.exists(vgg_file)]
-    if missing_vgg_files:
-        # Clean vgg dir
-        if os.path.exists(vgg_path):
-            shutil.rmtree(vgg_path)
-        os.makedirs(vgg_path)
-
-        # Download vgg
-        print('Downloading pre-trained vgg model...')
-        with DLProgress(unit='B', unit_scale=True, miniters=1) as pbar:
-            urlretrieve(
-                'https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/vgg.zip',  # noqa
-                os.path.join(
-                    vgg_path,
-                    vgg_filename),
-                pbar.hook)
-
-        # Extract vgg
-        print('Extracting model...')
-        zip_ref = zipfile.ZipFile(os.path.join(vgg_path, vgg_filename), 'r')
-        zip_ref.extractall(data_dir)
-        zip_ref.close()
-
-        # Remove zip file to save space
-        os.remove(os.path.join(vgg_path, vgg_filename))
-
-
 def maybe_download_mobilenet_weights(alpha_text='1_0', rows=224):
     base_weight_path = 'https://github.com/fchollet/deep-learning-models/releases/download/v0.6/'  # noqa
     model_name = 'mobilenet_%s_%d_tf_no_top.h5' % (alpha_text, rows)
@@ -112,7 +72,7 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
     image_paths = []
     label_fns = []
 
-    data_folders = glob(data_folder + "/_*/")
+    data_folders = glob(data_folder + "/episodeNew_*/")
     print(data_folders)
     for data_folder in data_folders:
         image_paths.extend(sorted(glob(os.path.join(data_folder, image_folder, '*.png')))[:])
@@ -120,7 +80,7 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
 
     # image_paths = image_paths[:16]
     train_paths, val_paths = train_test_split(
-        image_paths, test_size=0.4, random_state=28)
+        image_paths, test_size=0.2, random_state=28)
 
     # label_paths = {os.path.basename(path): path for path in label_fns}
     label_paths = {path: path for path in label_fns}
@@ -162,10 +122,10 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
                 if augmentation_fn:
                     image, gt_bg, gt_car, gt_road = augmentation_fn(image, gt_bg, gt_car, gt_road)
 
-                if len(images) == 0:
-                    cv2.imwrite("GT_car_img.png", 255 * gt_car)
-                    cv2.imwrite("GT_road_img.png", 255 * gt_road)
-                    cv2.imwrite("GT_bg_img.png", 255 * gt_bg)
+                # if len(images) == 0:
+                #     cv2.imwrite("GT_car_img.png", 255 * gt_car)
+                #     cv2.imwrite("GT_road_img.png", 255 * gt_road)
+                #     cv2.imwrite("GT_bg_img.png", 255 * gt_bg)
 
                 gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
                 gt_car = gt_car.reshape(*gt_car.shape, 1)
@@ -318,7 +278,7 @@ def gen_lyft_test_output(
 
     for image_file in sorted(
             glob(os.path.join(data_folder, image_folder, '*.png')))[:]:
-        print(image_file)
+        # print(image_file)
         in_image = scipy.misc.imread(image_file, mode='RGB')
         image = scipy.misc.imresize(in_image, image_shape)
         pimg = image[OFFSET_HIGH:OFFSET_LOW, :, :]
