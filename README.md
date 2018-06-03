@@ -1,84 +1,150 @@
-# LyftChallengeV2 - Semantic Segmentation
-
-### Overview
-Implementation tries to address semantic segmentation requirement for Lyft Challenge with Udacity. It uses [MobileNet](https://arxiv.org/abs/1704.04861) architecture. All stride-16 depthwise convolutions were replaced with dilated depthwise convolutions and the two final stride-32 layers were removed. This is similar to what was done in [Multi-Scale Context Aggregation by Dilated Convolutions](https://arxiv.org/abs/1511.07122). It also contains skip-connections for stride-8 and stride-4 (adding stride-2 gave no better results).
-The model uses the [Keras MobileNet implementation](https://github.com/fchollet/keras/blob/master/keras/applications/mobilenet.py) and training is done with [TensorFlow](https://www.tensorflow.org/).
-
-### Preparing the data for training
-mkdir data
-cd data
-wet https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/Lyft_Challenge/Training+Data/lyft_training_data.tar.gz -O dataset.tar.gz
-tar -xvzf dataset.tar.gz
-
-Train/Validation split: 90 % / 10 %
-
-Original dataset used for training [Not used for the challenge]:
-
-[Kitti Road dataset](http://www.cvlibs.net/datasets/kitti/eval_road.php) with 90% / 10% training/validation data split. Images are downscaled to half resolution.
+# MobileNet Encoder-Decoder Semantic Segmentation for Lyft Perception Challenge
 
 [//]: # (Image References)
-[image1]: ./res/loss_curves.png
-[image2]: ./res/augmentation_methods_overview.png
-[image3]: ./res/latest_run.png
-[image4]: ./res/benchmark_results.png
+[image1]: ./Docs/00080.png
+[image2]: ./Docs/00353.png
+[image3]: ./Docs/00486.png
+[image4]: ./Docs/DepthWiseConv.png
+[image5]: ./Docs/MobileNetArch_Resize.png
+[image6]: ./Docs/GT_car_img.png
+[image7]: ./Docs/GT_road_img.png
+[image8]: ./Docs/GT_bg_img.png
+[image9]: ./Docs/ScoreCalculation.png
+[image10]: ./Docs/TensorBoard.png
+[image11]: ./Docs/00415.png
 
-#### Data augmentation
-The dataset is rather small i.e. only 1000 training images. A few augmentation methods include: rotation, flipping, blurring and changing the illumination of the scene (see `augmentation.py`).
-An example is given in the following image:
+### Overview
+
+The goal of this project is to address pixel-wise identification of car and road/lane objects in camera images or video captured from Carla simulation environment. In this project, the model training is done on the efficient neural network called MobileNets using depth-wise separable convolutions combined in a encoder-decoder structure for the Semantic Segmentation Detection (SSD).
+
+With light-weighted network architecture, the model could be trained using single GTX1080Ti GPU, 15k images captured from Carla, and 20 epoches in 10 - 20 hours. After the training, the model is able to produce good results: 97% IOU and 0.9179 FScore with high frame rate of 15 - 16 FPS using Lyft Challenge platform.
+
+ ![TestingResult][image1]
+
+### Modified MobileNet Architecture
+The backbone of encoder for SSD model uses [MobileNet](https://arxiv.org/abs/1704.04861) architecture with several modifications:
+
+1. The depthwise separable convolution is kept but the 1-, 2-, 4- dilated convolutions are added. In this way, the context module aggregate multi-scale contextual information. The detailed info could be found in [Multi-Scale Context Aggregation by Dilated Convolutions](https://arxiv.org/abs/1511.07122).
+
+ ![TestingResult][image4]
+
+ [Depthwise Separable Convolution](https://arxiv.org/abs/1704.04861)
+
+2. The layers with depth of 1024 in the original MobileNet are removed. The output of the encoder is in depth of 512, it is to increase the speed of the model.
+3. The encoder is added following the MobileNet Encoder for the pixel-wise SSD. Also, the s16, s8, s4, and s2 layers are bypassed connected to the decoder.
+
+ ![ModifiedMobileNet][image5]
+
+
+### Data Collection and Preprocessing Data for Training
+
+The stree camera data could be generated using Carla Simulation Tools with python script. More than 15k images with ground truth labels generated using provided Carla simulation tools.
+
+The following code is the setting in python code to generate the camera images and ground truth for SSD.
+
+                # The default camera captures RGB images of the scene.
+                camera0 = Camera('CameraRGB')
+                # Set image resolution in pixels.
+                camera0.set_image_size(800, 600)
+                # Set its position relative to the car in meters.
+                camera0.set_position(1.30, 0, 1.30)
+                settings.add_sensor(camera0)
+
+                camera1 = Camera('CameraSeg', PostProcessing='SemanticSegmentation')
+                camera1.set_image_size(800, 600)
+                camera1.set_position(1.30, 0, 1.30)
+                settings.add_sensor(camera1)
+
+To preprocess data, only car's label and road/lane label are used for SSD training and final testing results. Therefore, the Carla generate ground truth labels need to be processed. Also, the car itself's hood is also in the image, in order to avoid the mis-training to include that in the SSD, the car labels of own car's hood need to be removed, by using the following code:
+
+    def preprocess_labels(label_image):
+        road_id = 7
+        lane_id = 6
+        car_id = 10
+        # Create a new single channel label image to modify
+        labels_new = np.copy(label_image[:, :, 0])
+        # Identify lane marking pixels (label is 6)
+        lane_marking_pixels = (label_image[:, :, 0] == lane_id).nonzero()
+        # Set lane marking pixels to road (label is 7)
+        labels_new[lane_marking_pixels] = road_id
+
+        # Identify all vehicle pixels
+        vehicle_pixels = (label_image[:, :, 0] == car_id).nonzero()
+        # Isolate vehicle pixels associated with the hood (y-position > 496)
+        hood_indices = (vehicle_pixels[0] >= 496).nonzero()[0]
+        hood_pixels = (vehicle_pixels[0][hood_indices], \
+                       vehicle_pixels[1][hood_indices])
+        # Set hood pixel labels to 0
+        labels_new[hood_pixels] = 0
+        # Return the preprocessed label image
+        return labels_new
+
+The following are the ground truth images after the label processing.
+
+Car Label
+
+ ![GroundTruthLabel][image6]
+
+Road Label
+
+ ![GroundTruthLabel][image7]
+
+Background Label
+
+ ![GroundTruthLabel][image8]
+
+
+Also, the augmentaions of flipping in horizontal and brightness changes are randomly added to the images for
+
+### Model Training
+
+The training data set is in size of 19k, and the training and validation sets are 80% and 20%, the batch size is 12 due to the limit of the GPU memory.
+
+    N_train: 15302	N_val:3826	Train steps: 1275	Val_steps: 318	Batch size: 12
+
+The cost function for the optimization is the combination of cross entropy and the modified IOU with different weight of car's F score and road's F score. The weight for car and road are 80% and 20%, it is because road's variation from image to image is small and F score is always much better than car's F score. By adding more weight on the car, the training would improve more on the car's SSD results.
+
+The score is calculated based on the provided equations:
+
+ ![ScoreCalculation][image9]
+
+The following code is the calculation of the loss for optimization. Since the higher the score the better SSD, then, then use difference between the max F score and the calculated weighted F score for the minimization process.
+
+    weights = [0.0, 0.8, 0.2]
+    ce_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=correct_label, logits=logits))
+    loss = ce_loss + (F_max - (weights[1] * F_car + weights[2] * F_road))
+
+Also, the training status is saved during the training for monitoring the loss improvement using the tensorboard.
+The training paramteres are as following:
+
+    learning_rate_val = 0.001
+    epochs = 20
+    decay = learning_rate_val / (2 * epochs)
+    batch_size = 12
+
+ ![TensorBoardMetric][image10]
+
+After 20 epochs of learning with learning rate of 0.001, the fine tuning is followed, with 1/10th of learning rate, and the first 10 layers are locked. The performance of the model could be improved a little further, but not very much.
+
+
+### Results
+Here are a few predictions @~97% validation IoU. More testing results could be found in the runs folder. The SSD model is able to label most of the road pixels and car pixels accurately and the according to the grader program on the Challenge workspace, the FPS reaches to 16 FPS, which is fast enough for real-time SSD applications.
+
 ![alt text][image2]
 
-#### Quantitative Results
-Training for 100 epochs results in the following loss curves:
-![alt text][image1]
-I ran a few experiments with different learning rate schedules, varying amounts of data augmentation and changed dilation rates but the results did not change that much. Moreover, there was no big difference in training from scratch vs. using ImageNet weights.
-By default logs are saved to the `log` directory. To visualize them start tensorboard via `tensorboard --logdir log`.
-
-#### Qualitative Results
-Here are a few predictions @~92% validation mIoU:
 ![alt text][image3]
-It can be seen that shadows are handled quite well. Road vs. sidewalk still leaves room for improvements (e.g. bottom left). More results can be found in the `latest_run` directory.
 
-<!---
-### Inference Optimization
-There are plenty of [methods for inference optimization](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/tools/graph_transforms/README.md) already implemented in tensorflow. I am using the `fold_constants`, `fold_batch_norms` and `round_weights` transforms (see `export_for_mobile.py`).
-These methods are explained in more detail on the [Pete Warden blog](https://petewarden.com/2017/06/22/what-ive-learned-about-neural-network-quantization/).
-After all, the (zipped) optimized graph is only 1.8M.
-To optimize your graph run:
-```
-python3 export_for_mobile.py - -weight_path ep-000-val_loss-0.0000.hdf5
-```
-You can check and benchmark the optimized graph with:
-```
-python3 test_graph.py
-` ``
-You should see that you get nice (tiny) speed-ups on the CPU (GPU) while the results stay the same:
-` ``
-One forward pass for `freezed.pb` on `/gpu:0` took: 20.6018 ms
-One forward pass for `optimized.pb` on `/gpu:0` took: 20.5921 ms
-One forward pass for `freezed.pb` on `/cpu:0` took: 163.9354 ms
-One forward pass for `optimized.pb` on `/cpu:0` took: 146.2478 ms
-` ``
-Though, I only checked them visually:
-![alt text][image4]
+![alt text][image11]
 
-**Note**: Most of the app code comes from these two codelabs:
-- [TensorFlow for Poets 2](https://codelabs.developers.google.com/codelabs/tensorflow-for-poets-2/index.html?index=..%2F..%2Findex#0)
-- [Android & TensorFlow: Artistic Style Transfer](https://codelabs.developers.google.com/codelabs/tensorflow-style-transfer-android/index.html?index=..%2F..%2Findex#0)
+    Your program has run, now scoring...
 
-#### Quantization
-As proposed in the chapter 'Quantization Challenges' of [Building Mobile Applications with TensorFlow](http://www.oreilly.com/data/free/building-mobile-applications-with-tensorflow.csp) I implemented the 8-bit quantization. Unfortunately, one can't just use the python interface. The procedure is as follows:
-- Freeze the graph:
-` ``
-python3 export_for_roady.py - -weight_path ep-000-val_loss-0.0000.hdf5
-` ``
-- Then run:
-` ``
-bash quantize.sh
-` ``
+    Your program runs at 15.151 FPS
 
-The second step requires that you built the transform_graph binary (`bazel build tensorflow/tools/graph_transforms:transform_graph`). It will record and freeze the requantization ranges.
-I tested both versions (8-bit and 32-bit) and the 32-bit version still runs faster.
--->
+    Car F score: 0.848 | Car Precision: 0.803 | Car Recall: 0.860 | Road F score: 0.988 | Road Precision: 0.988 | Road Recall: 0.986| Averaged F score: 0.918
+
+### Future Work
+
+To improve the SSD performance better with trade-off on the FPS, several models could be implemented: including [MobileNetV2](https://arxiv.org/abs/1801.04381), [MobileNetV2 Keras](https://github.com/xiaochus/MobileNetV2), [deeplabV3+ with backbone on MobileNet V2 and Xception](https://github.com/tensorflow/models/tree/f798e4b5504b0b7ed08f7b7a03fc5a79f00b9f21/research/deeplab). I have tried to adapted those models into current training implementation, and I was able to train the model with very small batch size of 4 with current GTX1080Ti GPU. More simplifications on the models are needed for fast and high accuracy SSD.
 
 ### Setup
 ##### Frameworks and Packages
@@ -90,15 +156,47 @@ Make sure you have the following is installed:
  - [SciPy](https://www.scipy.org/)
  - [OpenCV](https://opencv.org/)
 
+
 ##### Dataset
-[Not used for the challenge] Download the [Kitti Road dataset](http://www.cvlibs.net/datasets/kitti/eval_road.php) from [here](http://www.cvlibs.net/download.php?file=data_road.zip).  Extract the dataset in the `data` folder.  This will create the folder `data_road` with all the training and test images.
+To train the model, please save the data under the ./Train folder. ./Train/Test folder is for final test. ./Train/episode_* folders are for data captured from Carla program. Under each ./Train/episode_* folder, ./Train/episode_number/CameraRGB are images for training, and ./Train/episode_number/CameraSeg are data of ground truth labels.
 
-Please refer to "Preparing the data for training" for more details.
+##### Run the program
 
-### Start
-Run the following command to start the project:
-```
-python3 main.py
-```
+Command to train the model:
 
-Inspired from https://github.com/see--/P12-Semantic-Segmentation
+python main.py
+
+The saved trained model is under foder ./checkpoint
+
+To use the specific model for inference testing, change the 'model_path' variable in 'common.py' to the model for testing.
+
+To run the model for grading:
+
+grader 'python ./demo.py'
+
+### References
+
+1. Inverted Residuals and Linear Bottlenecks: Mobile Networks for Classification, Detection and Segmentation
+
+    Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen
+    [link](https://arxiv.org/abs/1801.04381)
+
+2. MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications
+
+    Andrew G. Howard, Menglong Zhu, Bo Chen, Dmitry Kalenichenko, Weijun Wang, Tobias Weyand, Marco Andreetto, Hartwig Adam
+    [link](https://arxiv.org/abs/1704.04861)
+
+3. Encoder-Decoder with Atrous Separable Convolution for Semantic Image Segmentation
+
+    Liang-Chieh Chen, Yukun Zhu, George Papandreou, Florian Schroff, Hartwig Adam. arXiv: 1802.02611.
+     [link](https://arxiv.org/abs/1802.02611)
+
+4. Xception: Deep Learning with Depthwise Separable Convolutions
+    François Chollet
+    [link](https://arxiv.org/abs/1610.02357)
+
+4. [SSD Project from Self-Driving Car Nano Degree](https://github.com/see--/P12-Semantic-Segmentation)
+
+5. [Modified MobileNet and Training](https://github.com/sagarbhokre/LyftChallengeV2)
+
+6. [Multi-Scale Context Aggregation by Dilated Convolutions](https://arxiv.org/abs/1511.07122).

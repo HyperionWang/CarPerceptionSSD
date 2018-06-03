@@ -36,7 +36,6 @@ def TruncatedMobileNet(input_height, input_width):
                               strides=(2, 2), block_id=4)
     x_s8 = _depthwise_conv_block(x, 256, alpha, depth_multiplier, block_id=5)
     # s / 16
-    # DONE(see--): Make some of these dilated
     x = _depthwise_conv_block(x_s8, 512, alpha, depth_multiplier,
                               strides=(2, 2), block_id=6)
     x = _depthwise_conv_block(
@@ -57,31 +56,6 @@ def SegMobileNet(input_height, input_width, num_classes=21):
     assert input_height // 16 * 16 == input_height
     assert input_width // 16 * 16 == input_width
     img_input, x_s2, x_s4, x_s8, x_s16 = TruncatedMobileNet(input_height, input_width)
-
-    '''
-    x_s16 = _conv_bn_pred(x_s16, 16, num_classes=num_classes)
-
-    Upsample_s8 = Lambda(
-        lambda x: _resize_bilinear(x, input_height // 8, input_width // 8))
-    x_up8 = Upsample_s8(x_s16)
-
-    x_s8 = _conv_bn_pred(x_s8, 8, num_classes=num_classes)
-    x_s8 = Add(name='add_s8')([x_up8, x_s8])
-    Upsample_s4 = Lambda(
-        lambda x: _resize_bilinear(x, input_height // 4, input_width // 4))
-    x_up4 = Upsample_s4(x_s8)
-    x_s4 = _conv_bn_pred(x_s4, 4, num_classes=num_classes)
-    x_s4 = Add(name='add_s4')([x_up4, x_s4])
-    Upsample_s2 = Lambda(
-        lambda x: _resize_bilinear(x, input_height // 2, input_width // 2))
-    x_up2 = Upsample_s2(x_s4)
-    x_s2 = _conv_bn_pred(x_s2, 2, num_classes=num_classes)
-    x_s2 = Add(name='add_s2')([x_up2, x_s2])
-    #x_s2 = x_up2
-    Upsample_s1 = Lambda(
-        lambda x: _resize_bilinear(x, input_height // 1, input_width // 1))
-    x = Upsample_s1(x_s2)
-    '''
 
     x_up8 = Conv2DTranspose(int(256 * alpha), (3, 3), strides=(2, 2), data_format='channels_last', padding='same',
                             name='deconv_8')(x_s16)

@@ -3,6 +3,7 @@ import os
 import shutil
 import tensorflow as tf
 from keras import backend as K
+from keras.utils import plot_model
 import helper
 import warnings
 from distutils.version import LooseVersion
@@ -13,7 +14,8 @@ import numpy as np
 from IPython import embed
 from augmentation import rotate_both, flip_both, blur_both, illumination_change_both  # noqa
 import glob
-
+import os
+os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/Graphviz2.38/bin/'
 # https://keras.io/backend/
 KERAS_TRAIN = 1
 KERAS_TEST = 0
@@ -260,13 +262,16 @@ def augmentation_fn(image, label, label2, label3):
     label2 = np.uint8(label2)
     label3 = np.uint8(label3)
     image, label, label2, label3 = flip_both(image, label, label2, label3, p=0.5)
+    # image, label, label2, label3 = rotate_both(image, label, label2, label3, p=0.5, ignore_label=1)
+    # image, label, label2, label3 = blur_both(image, label, label2, label3, p=0.5)
     image, label, label2, label3 = illumination_change_both(image, label, label2, label3, p=0.5)
     return image, label == 1, label2 == 1, label3 == 1
 
+
+# tests.test_train_nn(train_nn)
 def run():
     from_scratch = False
-    do_train = True
-    fine_tuning = True
+    do_train = False
     learning_rate_val = 0.001
     epochs = 20
     decay = learning_rate_val / (2 * epochs)
@@ -305,12 +310,6 @@ def run():
         if not from_scratch:
             # model.load_weights(weight_path, by_name=True)
             model.load_weights(model_files[-1])
-
-            if fine_tuning:
-                # for layer in model.layers[:10]:
-                #     layer.trainable = False
-                learning_rate_val /= 10
-                decay = 1e-6
         input_image = model.input
         logits = model.output
         # https://blog.keras.io/keras-as-a-simplified-interface-to-tensorflow-tutorial.html  # noqa
@@ -332,11 +331,11 @@ def run():
                      model, N_train, N_val)
         else:
             model.load_weights(model_files[-1])
-
+        plot_model(model, to_file='seg_MobileNetModel.png')
         helper.lyft_save_inference_samples(
             runs_dir, data_dir, 'CameraRGB', sess, image_shape, nw_shape,
             logits, learning_phase, input_image)
-        # OPTIONAL: Apply the trained model to a video
+
 
 
 if __name__ == '__main__':

@@ -72,7 +72,7 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
     image_paths = []
     label_fns = []
 
-    data_folders = glob(data_folder + "/episodeNew_*/")
+    data_folders = glob(data_folder + "/episode*_*/")
     print(data_folders)
     for data_folder in data_folders:
         image_paths.extend(sorted(glob(os.path.join(data_folder, image_folder, '*.png')))[:])
@@ -92,7 +92,6 @@ def gen_lyft_batches_functions(data_folder, image_shape, nw_shape, image_folder=
         :return: Batches of training data
         """
         background_color = np.array([0, 0, 0])
-        pedestrian_id = 4
         road_id = 7
         lane_id = 6
         car_id = 10

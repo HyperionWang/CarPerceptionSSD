@@ -71,15 +71,18 @@ if __name__ == '__main__':
 
 
     # Define encoder function
+    # def encode(array):
+    #     pil_img = Image.fromarray(array)
+    #     buff = BytesIO()
+    #     pil_img.save(buff, format="PNG")
+    #     return base64.b64encode(buff.getvalue()).decode("utf-8")
     def encode(array):
-        pil_img = Image.fromarray(array)
-        buff = BytesIO()
-        pil_img.save(buff, format="PNG")
-        return base64.b64encode(buff.getvalue()).decode("utf-8")
+        retval, buffer = cv2.imencode('.png', array)
+        return base64.b64encode(buffer).decode("utf-8")
 
 
-    video = skvideo.io.vread(file)
-
+    # video = skvideo.io.vread(file)
+    cap = cv2.VideoCapture(file)
     m, output_width, output_height = load_seg_model()
 
     answer_key = {}
@@ -93,30 +96,39 @@ if __name__ == '__main__':
     # d = int(rgb_frame.shape[0] - int(output_height))
     # d = int(input_height - int(output_height))
 
-    for rgb_frame in video:
-        # X = preprocess_img(rgb_frame[d:,:,:])
-        x = rgb_frame[OFFSET_HIGH:OFFSET_LOW, :, :]
-        img = x / 127.5 - 1.0
-        pr_out = m.predict(np.array([img]))[0]
+    # for rgb_frame in video:
+    while(cap.isOpened()):
+        try:
+            ret, bgr_frame = cap.read()
+            rgb_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+            # X = preprocess_img(rgb_frame[d:,:,:])
+            x = rgb_frame[OFFSET_HIGH:OFFSET_LOW, :, :]
+            img = x / 127.5 - 1.0
+            pr_out = m.predict(np.array([img]))[0]
 
-        pr[OFFSET_HIGH:OFFSET_LOW, :] = pr_out.reshape((nw_shape[0], nw_shape[1], n_classes)).argmax(axis=2)
+            pr[OFFSET_HIGH:OFFSET_LOW, :] = pr_out.reshape((nw_shape[0], nw_shape[1], n_classes)).argmax(axis=2)
 
-        binary_car_result = np.where((pr == CAR_ID), 1, 0).astype('uint8')
-        binary_road_result = np.where((pr == ROAD_ID), 1, 0).astype('uint8')
+            binary_car_result = np.where((pr == CAR_ID), 1, 0).astype('uint8')
+            binary_road_result = np.where((pr == ROAD_ID), 1, 0).astype('uint8')
 
-        answer_key[frame] = [encode(binary_car_result), encode(binary_road_result)]
+            answer_key[frame] = [encode(binary_car_result), encode(binary_road_result)]
 
-        if visualize:
-            seg_img = visualizeImage(rgb_frame, pr, render=True)
+            if visualize:
+                seg_img = visualizeImage(rgb_frame, pr, render=True)
 
-        # Increment frame
-        frame += 1
+            # Increment frame
+            frame += 1
+        except Exception:
+            print(json.dumps(answer_key))
+            cap.release()
 
     if enable_profiling:
         fps = frame / (time.time() - start_t)
         # print("FPS: %f" % (fps))
     else:
         # Print output in proper json format
-        # print(json.dumps(answer_key))
-        json.dumps(answer_key)
+        print(json.dumps(answer_key))
+        with open('test_result.json', 'w') as outfile:
+            json.dump(answer_key, outfile)
+        # json.dumps(answer_key)
         pass
