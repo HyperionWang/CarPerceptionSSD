@@ -4,13 +4,13 @@
 [image1]: ./Docs/00080.png
 [image2]: ./Docs/00353.png
 [image3]: ./Docs/00486.png
-[image4]: ./Docs/DepthWiseConv.png
+[image4]: ./Docs/DepthWiseConv.PNG
 [image5]: ./Docs/MobileNetArch_Resize.png
 [image6]: ./Docs/GT_car_img.png
 [image7]: ./Docs/GT_road_img.png
 [image8]: ./Docs/GT_bg_img.png
-[image9]: ./Docs/ScoreCalculation.png
-[image10]: ./Docs/TensorBoard.png
+[image9]: ./Docs/ScoreCalculation.PNG
+[image10]: ./Docs/TensorBoard.PNG
 [image11]: ./Docs/00415.png
 
 ### Overview
